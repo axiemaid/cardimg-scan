@@ -1,0 +1,12 @@
+{
+  "name": "cardimg-scan",
+  "version": "1.0.0",
+  "description": "Trading Card Image Scanner for OpenClaw — scan validation and edge detection",
+  "main": "lib/scan.js",
+  "scripts": {
+    "start": "node scripts/scan.cjs"
+  },
+  "dependencies": {
+    "sharp": "^0.35.5"
+  }
+}
