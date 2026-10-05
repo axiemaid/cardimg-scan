@@ -14,7 +14,7 @@ const path = require('path')
 const crypto = require('crypto')
 const express = require('express')
 const multer = require('multer')
-const { scanCard } = require('../lib/scan.js')
+const { scanCard, appendLog } = require('../lib/scan.js')
 
 const upload = multer({ storage: multer.memoryStorage() })
 
@@ -56,6 +56,20 @@ function createServer(port = DEFAULT_PORT) {
         const scanResult = await scanCard(file.buffer)
 
         if (!scanResult.passed) {
+          appendLog({
+            timestamp: new Date().toISOString(),
+            filename: file.originalname,
+            passed: false,
+            originalHash: scanResult.originalHash || scanResult.hash,
+            originalSize: file.buffer.length,
+            originalFormat: scanResult.format,
+            width: scanResult.width,
+            height: scanResult.height,
+            dpi: scanResult.dpi.effectiveDPI,
+            failures: scanResult.failures,
+            txid: null,
+            fee: null
+          })
           results.push({
             filename: file.originalname,
             passed: false,
@@ -76,6 +90,23 @@ function createServer(port = DEFAULT_PORT) {
           uploadResult = { error: 'Uploader not installed' }
         }
 
+        appendLog({
+          timestamp: new Date().toISOString(),
+          filename: file.originalname,
+          passed: true,
+          originalHash: scanResult.originalHash,
+          uploadedHash: scanResult.hash,
+          originalSize: scanResult.originalSize,
+          originalFormat: scanResult.format,
+          convertedSize: scanResult.size,
+          convertedFormat: 'JPEG',
+          width: scanResult.width,
+          height: scanResult.height,
+          dpi: scanResult.dpi.effectiveDPI,
+          txid: uploadResult.txid,
+          fee: uploadResult.fee
+        })
+
         results.push({
           filename: file.originalname,
           passed: true,
@@ -87,6 +118,12 @@ function createServer(port = DEFAULT_PORT) {
           fee: uploadResult.fee
         })
       } catch (e) {
+        appendLog({
+          timestamp: new Date().toISOString(),
+          filename: file.originalname,
+          passed: false,
+          error: e.message
+        })
         results.push({
           filename: file.originalname,
           passed: false,
