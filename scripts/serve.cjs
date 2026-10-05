@@ -70,9 +70,11 @@ function createServer(port = DEFAULT_PORT) {
           continue
         }
 
-        // 2. Upload if uploader is available
+        // 2. Upload converted JPEG if uploader is available
         let uploadResult = null
-        if (uploadCardImg) {
+        if (uploadCardImg && scanResult.uploadBuffer) {
+          uploadResult = await uploadCardImg(scanResult.uploadBuffer, walletPath)
+        } else if (uploadCardImg) {
           uploadResult = await uploadCardImg(file.buffer, walletPath)
         } else {
           uploadResult = { error: 'Uploader not installed' }
@@ -84,6 +86,7 @@ function createServer(port = DEFAULT_PORT) {
           hash: scanResult.hash,
           dpi: scanResult.dpi.effectiveDPI,
           size: scanResult.size,
+          originalSize: scanResult.originalSize,
           txid: uploadResult.txid,
           fee: uploadResult.fee
         })
@@ -234,7 +237,12 @@ function getHTML() {
             status.textContent = '✓ Passed — uploaded to BSV'
             let detail = '<div class="detail">'
             detail += 'DPI: ' + r.dpi + ' | '
-            detail += 'Size: ' + (r.size / 1024).toFixed(1) + 'KB | '
+            detail += 'Size: ' + (r.size / 1024).toFixed(1) + 'KB'
+            if (r.originalSize && r.originalSize !== r.size) {
+              detail += ' (from ' + (r.originalSize / 1024 / 1024).toFixed(1) + 'MB) | '
+            } else {
+              detail += ' | '
+            }
             detail += 'Fee: ' + r.fee + ' sats'
             if (r.txid) {
               detail += '<br><span class="txid">TXID: ' + r.txid + '</span>'
