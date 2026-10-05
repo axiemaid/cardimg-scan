@@ -2,7 +2,7 @@
  * CARDIMG Scanner — Web Server
  * 
  * Web UI for scanning and uploading card images.
- * User selects file(s) → scan validates → if passed, upload to BSV automatically.
+ * User selects file(s) → preview with confirm button → scan validates → if passed, upload to BSV automatically.
  * 
  * Depends on:
  *   - Trading Card Image Uploader (lib/cardimg.js) — for on-chain upload
@@ -35,7 +35,6 @@ const DEFAULT_PORT = 3020
 function createServer(port = DEFAULT_PORT) {
   const app = express()
 
-  // CORS
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
@@ -44,7 +43,6 @@ function createServer(port = DEFAULT_PORT) {
     next()
   })
 
-  // POST /scan — validate one or more images, upload if passed
   app.post('/scan', upload.array('images', 50), async (req, res) => {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' })
@@ -55,7 +53,6 @@ function createServer(port = DEFAULT_PORT) {
 
     for (const file of req.files) {
       try {
-        // 1. Scan
         const scanResult = await scanCard(file.buffer)
 
         if (!scanResult.passed) {
@@ -70,7 +67,6 @@ function createServer(port = DEFAULT_PORT) {
           continue
         }
 
-        // 2. Upload converted JPEG if uploader is available
         let uploadResult = null
         if (uploadCardImg && scanResult.uploadBuffer) {
           uploadResult = await uploadCardImg(scanResult.uploadBuffer, walletPath)
@@ -102,7 +98,6 @@ function createServer(port = DEFAULT_PORT) {
     res.json({ results })
   })
 
-  // GET / — web UI
   app.get('/', (req, res) => {
     res.setHeader('Content-Type', 'text/html')
     res.send(getHTML())
@@ -146,6 +141,7 @@ function getHTML() {
     .result.passed { border-left: 4px solid #4a4; }
     .result.failed { border-left: 4px solid #f44; }
     .result.processing { border-left: 4px solid #6af; }
+    .result.pending { border-left: 4px solid #888; }
     .result img { width: 120px; height: 120px; object-fit: cover; border-radius: 4px; background: #333; flex-shrink: 0; }
     .result .info { flex: 1; }
     .result .filename { font-weight: 600; margin-bottom: 4px; word-break: break-all; }
@@ -154,9 +150,15 @@ function getHTML() {
     .result .status.pass { color: #4a4; }
     .result .status.fail { color: #f44; }
     .result .status.processing { color: #6af; }
+    .result .status.pending { color: #888; }
     .result .txid { font-family: monospace; font-size: 12px; color: #6af; word-break: break-all; }
     .result a { color: #6af; text-decoration: none; }
     .result a:hover { text-decoration: underline; }
+    .result .actions { margin-top: 8px; display: flex; gap: 8px; }
+    .btn-confirm { background: #4a4; color: #fff; padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .btn-confirm:hover { background: #5b5; }
+    .btn-cancel { background: #444; color: #ccc; padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .btn-cancel:hover { background: #555; }
     .progress { color: #6af; font-size: 14px; margin-top: 16px; }
     .empty { text-align: center; color: #555; padding: 40px; }
   </style>
@@ -177,6 +179,7 @@ function getHTML() {
     const dropzone = document.getElementById('dropzone')
     const fileInput = document.getElementById('fileInput')
     const resultsDiv = document.getElementById('results')
+    let pendingFiles = []
 
     dropzone.addEventListener('click', () => fileInput.click())
 
@@ -197,71 +200,80 @@ function getHTML() {
       const files = Array.from(fileList)
       if (files.length === 0) return
 
-      // Render placeholders
       resultsDiv.innerHTML = ''
-      for (const file of files) {
+      pendingFiles = files
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
         const div = document.createElement('div')
-        div.className = 'result processing'
+        div.className = 'result pending'
         const imgUrl = URL.createObjectURL(file)
-        div.innerHTML = \`
-          <img src="\${imgUrl}" alt="\${file.name}">
-          <div class="info">
-            <div class="filename">\${file.name}</div>
-            <div class="status processing">Processing...</div>
-          </div>
-        \`
+        div.innerHTML = '<img src="' + imgUrl + '" alt="' + file.name + '">' +
+          '<div class="info">' +
+          '<div class="filename">' + file.name + '</div>' +
+          '<div class="status pending">Awaiting confirmation</div>' +
+          '<div class="detail">' + (file.size / 1024 / 1024).toFixed(1) + 'MB</div>' +
+          '<div class="actions">' +
+          '<button class="btn-confirm" onclick="confirmFile(' + i + ')">Confirm</button>' +
+          '<button class="btn-cancel" onclick="cancelFile(this)">Cancel</button>' +
+          '</div>' +
+          '</div>'
         resultsDiv.appendChild(div)
       }
+    }
 
-      // Upload all files at once
+    function cancelFile(btn) {
+      const div = btn.closest('.result')
+      div.remove()
+    }
+
+    async function confirmFile(fileIndex) {
+      const file = pendingFiles[fileIndex]
+      if (!file) return
+
+      const div = resultsDiv.children[fileIndex]
+      if (!div) return
+
+      div.classList.remove('pending')
+      div.classList.add('processing')
+      div.querySelector('.info').innerHTML = '<div class="filename">' + file.name + '</div><div class="status processing">Processing...</div>'
+
       const formData = new FormData()
-      for (const file of files) {
-        formData.append('images', file)
-      }
+      formData.append('images', file)
 
       try {
         const res = await fetch('/scan', { method: 'POST', body: formData })
         const data = await res.json()
+        const r = data.results[0]
+        if (!r) return
 
-        const items = resultsDiv.querySelectorAll('.result')
-        data.results.forEach((r, i) => {
-          const div = items[i]
-          if (!div) return
+        div.classList.remove('processing')
+        div.classList.add(r.passed ? 'passed' : 'failed')
 
-          div.classList.remove('processing')
-          div.classList.add(r.passed ? 'passed' : 'failed')
-
-          const status = div.querySelector('.status')
-          if (r.passed) {
-            status.className = 'status pass'
-            status.textContent = '✓ Passed — uploaded to BSV'
-            let detail = '<div class="detail">'
-            detail += 'DPI: ' + r.dpi + ' | '
-            detail += 'Size: ' + (r.size / 1024).toFixed(1) + 'KB'
-            if (r.originalSize && r.originalSize !== r.size) {
-              detail += ' (from ' + (r.originalSize / 1024 / 1024).toFixed(1) + 'MB) | '
-            } else {
-              detail += ' | '
-            }
-            detail += 'Fee: ' + r.fee + ' sats'
-            if (r.txid) {
-              detail += '<br><span class="txid">TXID: ' + r.txid + '</span>'
-              detail += '<br><a href="https://whatsonchain.com/tx/' + r.txid + '" target="_blank">View on WhatsOnChain →</a>'
-            }
-            detail += '</div>'
-            div.querySelector('.info').innerHTML = '<div class="filename">' + r.filename + '</div><div class="status pass">✓ Passed — uploaded to BSV</div>' + detail
+        if (r.passed) {
+          let detail = '<div class="detail">'
+          detail += 'DPI: ' + r.dpi + ' | '
+          detail += 'Size: ' + (r.size / 1024).toFixed(1) + 'KB'
+          if (r.originalSize && r.originalSize !== r.size) {
+            detail += ' (from ' + (r.originalSize / 1024 / 1024).toFixed(1) + 'MB) | '
           } else {
-            const reasons = r.failures ? r.failures.join(', ') : r.error || 'Unknown error'
-            div.querySelector('.info').innerHTML = '<div class="filename">' + r.filename + '</div><div class="status fail">✗ Failed — ' + reasons + '</div><div class="detail">DPI: ' + (r.dpi || 'N/A') + ' | Size: ' + (r.size / 1024).toFixed(1) + 'KB</div>'
+            detail += ' | '
           }
-        })
+          detail += 'Fee: ' + r.fee + ' sats'
+          if (r.txid) {
+            detail += '<br><span class="txid">TXID: ' + r.txid + '</span>'
+            detail += '<br><a href="https://whatsonchain.com/tx/' + r.txid + '" target="_blank">View on WhatsOnChain →</a>'
+          }
+          detail += '</div>'
+          div.querySelector('.info').innerHTML = '<div class="filename">' + r.filename + '</div><div class="status pass">✓ Passed — uploaded to BSV</div>' + detail
+        } else {
+          const reasons = r.failures ? r.failures.join(', ') : r.error || 'Unknown error'
+          div.querySelector('.info').innerHTML = '<div class="filename">' + r.filename + '</div><div class="status fail">✗ Failed — ' + reasons + '</div><div class="detail">DPI: ' + (r.dpi || 'N/A') + ' | Size: ' + (r.size / 1024).toFixed(1) + 'KB</div>'
+        }
       } catch (err) {
-        const items = resultsDiv.querySelectorAll('.result')
-        items.forEach(div => {
-          div.classList.remove('processing')
-          div.classList.add('failed')
-          div.querySelector('.info').innerHTML = '<div class="status fail">✗ Error: ' + err.message + '</div>'
-        })
+        div.classList.remove('processing')
+        div.classList.add('failed')
+        div.querySelector('.info').innerHTML = '<div class="filename">' + file.name + '</div><div class="status fail">✗ Error: ' + err.message + '</div>'
       }
     }
   </script>
@@ -273,6 +285,5 @@ module.exports = { createServer }
 
 // Run if called directly (not required as a module)
 if (require.main === module) {
-  const port = 3020
-  createServer(port)
+  createServer(DEFAULT_PORT)
 }
