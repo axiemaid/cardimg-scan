@@ -1,37 +1,43 @@
 ---
 name: cardimg-scan
-description: Validate card scan images before on-chain upload — DPI, edge detection, black background
+description: Validate card scan images and upload to BSV — DPI, edge detection, black background
 ---
 
 # CARDIMG Scanner Skill
 
-Validates card scan images before on-chain upload. Application-layer quality control — our subjective standard, not a protocol requirement.
+Web UI for scanning and uploading card images. User selects files, scanner validates (DPI, card edges, black background), and if passed, uploads to BSV automatically via the Trading Card Image Uploader.
 
 ## Dependency Philosophy
 
 The CARDIMG protocol is intentionally dumb — it accepts any image bytes. Quality control lives entirely in the application layer. This module is our fork's standard. Other upload providers can set their own standards. The protocol stays permissionless.
 
-This module calls the [Trading Card Image Uploader](https://github.com/axiemaid/cardimg-upload) as a dependency — it validates, the uploader broadcasts.
+This module calls the [Trading Card Image Uploader](https://github.com/axiemaid/cardimg-upload) as a dependency — it validates, the uploader broadcasts. Files that pass are uploaded automatically. No manual step between scan and upload.
 
 ## Setup
 
-Requires the `sharp` or `pngjs` npm package for image decoding. Install sharp for best performance:
+Install dependencies:
 
 ```bash
-npm install sharp
+npm install
 ```
 
-Or for PNG-only support without native deps:
+Install the Trading Card Image Uploader as a sibling module:
 
 ```bash
-npm install pngjs
+cd ~/.openclaw
+git clone https://github.com/axiemaid/cardimg-upload.git
+cd cardimg-upload && npm install
 ```
 
-## Scan a card image
+Requires a BSV wallet at `~/.openclaw/bsv-wallet.json`. To create and fund one, use the [BSV wallet skill](https://github.com/axiemaid/bsv-openclaw-skill).
+
+## Start the server
 
 ```bash
-node scripts/scan.cjs card.png
+node scripts/serve.cjs
 ```
+
+Opens at `http://localhost:3020`. Drag and drop or select card scan images. The scanner validates each file and uploads to BSV if it passes.
 
 ## Checks
 
@@ -44,25 +50,16 @@ Does NOT check:
 - Sharpness/focus (future consideration)
 - Color accuracy (future consideration)
 
-## Output
+## CLI (batch validation only — no upload)
 
-```
-✓ PASSED — ready for upload
-  Hash: 397cb348667b1926479702d54baf62b0fca6d5aa5a6c76953d1be121fa671073
-  Upload with: node scripts/upload.cjs card.png
+```bash
+node scripts/scan.cjs card.png
 ```
 
-Or:
-
-```
-✗ FAILED
-  - Resolution 327 DPI (minimum 600)
-  - Background not black enough (45%)
-```
+CLI mode validates only. Use the web UI for the full scan + upload flow.
 
 ## What it does NOT do
 
-- No uploading (use the [Trading Card Image Uploader](https://github.com/axiemaid/cardimg-upload))
 - No indexing (use the [CARDIMG indexer](https://github.com/axiemaid/cardimg-indexer))
 - No serving (use the [CARDIMG API](https://github.com/axiemaid/cardimg-api))
 - No auto-rotation or correction (rescan if orientation is wrong)
@@ -72,9 +69,7 @@ Or:
 
 Application layer — sits on top of the protocol plumbing:
 
-- **[Trading Card Image Uploader](https://github.com/axiemaid/cardimg-upload)** — upload scans on-chain
+- **[Trading Card Image Uploader](https://github.com/axiemaid/cardimg-upload)** — called automatically on scan pass
 - **[CARDIMG indexer](https://github.com/axiemaid/cardimg-indexer)** — index all CARDIMG txs from anyone
 - **[CARDIMG API](https://github.com/axiemaid/cardimg-api)** — serve indexed images and metadata over HTTP
 - **[BSV wallet skill](https://github.com/axiemaid/bsv-openclaw-skill)** — create and fund the wallet
-
-This module is our app's quality gate. It validates, then hands off to the uploader.

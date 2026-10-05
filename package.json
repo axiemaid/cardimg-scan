@@ -7,6 +7,9 @@
     "start": "node scripts/scan.cjs"
   },
   "dependencies": {
-    "sharp": "^0.35.5"
+    "sharp": "^0.35.5",
+    "express": "^4.18.0",
+    "multer": "^2.0.0",
+    "bsv": "^1.5.6"
   }
 }
