@@ -262,3 +262,9 @@ function getHTML() {
 }
 
 module.exports = { createServer }
+
+// Run if called directly (not required as a module)
+if (require.main === module) {
+  const port = 3020
+  createServer(port)
+}
