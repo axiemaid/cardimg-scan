@@ -29,7 +29,7 @@ git clone https://github.com/axiemaid/cardimg-upload.git
 cd cardimg-upload && npm install
 ```
 
-Requires a BSV wallet at `~/.openclaw/bsv-wallet.json`. To create and fund one, use the [BSV wallet skill](https://github.com/axiemaid/bsv-openclaw-skill).
+Requires a dedicated BSV wallet at `~/.openclaw/cardimg-scanner-wallet.json`. To create and fund one, use the [BSV wallet skill](https://github.com/axiemaid/bsv-openclaw-skill).
 
 ## Start the server
 

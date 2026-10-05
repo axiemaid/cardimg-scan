@@ -29,7 +29,7 @@ try {
   console.warn('Expected at: ~/.openclaw/cardimg-upload/lib/cardimg.js')
 }
 
-const DEFAULT_WALLET = path.join(process.env.HOME || '/root', '.openclaw', 'bsv-wallet.json')
+const DEFAULT_WALLET = path.join(process.env.HOME || '/root', '.openclaw', 'cardimg-scanner-wallet.json')
 const DEFAULT_PORT = 3020
 
 function createServer(port = DEFAULT_PORT) {
