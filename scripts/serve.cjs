@@ -51,6 +51,24 @@ try {
 }
 
 const DEFAULT_WALLET = path.join(process.env.HOME || '/root', '.openclaw', 'cardimg-scanner-wallet.json')
+const UPLOAD_QUEUE = path.join(process.env.HOME || '/root', '.openclaw', 'cardimg', 'upload-queue.json')
+
+// Write txids to a queue file for the indexer to pick up
+function queueTxids(txids) {
+  try {
+    let queue = []
+    if (fs.existsSync(UPLOAD_QUEUE)) {
+      queue = JSON.parse(fs.readFileSync(UPLOAD_QUEUE, 'utf8'))
+      if (!Array.isArray(queue)) queue = []
+    }
+    for (const txid of txids) {
+      if (!queue.includes(txid)) queue.push(txid)
+    }
+    fs.writeFileSync(UPLOAD_QUEUE, JSON.stringify(queue, null, 2))
+  } catch (e) {
+    console.error('Failed to write upload queue:', e.message)
+  }
+}
 const DEFAULT_PORT = 3020
 
 // In-memory store for processed images between analyze and upload
@@ -210,6 +228,11 @@ function createServer(port = DEFAULT_PORT) {
         errors.push({ error: 'CARDSET binding failed: ' + e.message + '. Images are uploaded but not linked.' })
       }
     }
+
+    // Queue all txids for indexer backfill
+    const allTxids = [...uploaded.map(u => u.txid)]
+    if (cardset) allTxids.push(cardset.txid)
+    if (allTxids.length > 0) queueTxids(allTxids)
 
     res.json({ uploaded, errors, cardset })
   })
